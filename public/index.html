@@ -1,22 +1,18 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Posts</title>
+  <title>Junjie Posts</title>
 
   <!-- Bootstrap CSS CDN -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 
+  <!-- Quill CSS CDN -->
+  <link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet">
+
   <style>
-    .editor {
-      border: 1px solid #ced4da;
-      border-radius: 5px;
-      min-height: 150px;
-      padding: 10px;
-      background: white;
-    }
-    .editor:focus {
-      outline: none;
-      border-color: #0d6efd;
+    #editor {
+      height: 200px;
+      background-color: #fff;
     }
   </style>
 </head>
@@ -24,161 +20,152 @@
 <body class="bg-light p-3">
   <div class="container">
 
-    <!-- POSTS -->
+    <!-- Posts -->
     <div id="posts"></div>
 
-    <!-- ADD POST -->
+    <!-- Add Post -->
     <form id="postForm" class="mb-3 mt-3">
-      <input type="text" id="title" class="form-control mb-2" placeholder="Title" required />
-
-      <!-- Toolbar -->
-      <div class="mb-2">
-        <button type="button" class="btn btn-sm btn-secondary" onclick="format('bold')"><b>B</b></button>
-        <button type="button" class="btn btn-sm btn-secondary" onclick="format('italic')"><i>I</i></button>
-        <button type="button" class="btn btn-sm btn-secondary" onclick="addLink()">Link</button>
-        <button type="button" class="btn btn-sm btn-secondary" onclick="addImage()">Image</button>
-        <button type="button" class="btn btn-sm btn-secondary" onclick="addVideo()">Video</button>
-      </div>
-
-      <!-- Editor -->
-      <div id="content" class="editor" contenteditable="true"></div>
-
+      <input type="text" id="title" placeholder="Title" class="form-control mb-2" required />
+      <div id="editor"></div>
       <button type="submit" id="postBtn" class="btn btn-primary mt-2">Add Post</button>
     </form>
 
-    <!-- AUTH BUTTONS -->
+    <br />
+
+    <!-- Auth buttons -->
     <div class="d-flex justify-content-start mb-4">
       <button id="loginBtn" class="btn btn-success me-2">Login with MetaMask</button>
       <button id="logoutBtn" class="btn btn-danger" disabled>Logout</button>
     </div>
+
   </div>
 
-<script type="module">
-  let session_name = "guest";
+  <!-- Quill JS -->
+  <script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
 
-  const loginBtn = document.getElementById("loginBtn");
-  const logoutBtn = document.getElementById("logoutBtn");
-  const postBtn = document.getElementById("postBtn");
-  const postForm = document.getElementById("postForm");
-  const titleInput = document.getElementById("title");
-  const contentDiv = document.getElementById("content");
+  <script type="module">
+    let session_name = "guest";
 
-  function updateUI() {
-    const isGuest = session_name === "guest";
-    postForm.style.display = isGuest ? "none" : "block";
-    postBtn.disabled = isGuest;
-    loginBtn.disabled = !isGuest;
-    logoutBtn.disabled = isGuest;
-  }
+    const loginBtn = document.getElementById("loginBtn");
+    const logoutBtn = document.getElementById("logoutBtn");
+    const postBtn = document.getElementById("postBtn");
+    const titleInput = document.getElementById("title");
+    const postForm = document.getElementById("postForm");
 
-  /* ===== EDITOR FUNCTIONS ===== */
-  window.format = cmd => document.execCommand(cmd);
+    // Quill editor
+    const quill = new Quill("#editor", {
+      theme: "snow",
+      placeholder: "Write your post here..."
+    });
 
-  window.addLink = () => {
-    const url = prompt("Enter link URL");
-    if (url) document.execCommand("createLink", false, url);
-  };
-
-  window.addImage = () => {
-    const url = prompt("Enter image URL");
-    if (url) document.execCommand("insertImage", false, url);
-  };
-
-  window.addVideo = () => {
-    const url = prompt("Enter YouTube or MP4 URL");
-    if (!url) return;
-
-    let embed = "";
-
-    if (url.includes("youtube.com") || url.includes("youtu.be")) {
-      const id = url.split("v=")[1] || url.split("/").pop();
-      embed = `<iframe width="100%" height="315"
-        src="https://www.youtube.com/embed/${id}"
-        frameborder="0" allowfullscreen></iframe>`;
-    } else {
-      embed = `<video controls width="100%">
-        <source src="${url}">
-      </video>`;
+    function updateUI() {
+      const isGuest = session_name === "guest";
+      postBtn.disabled = isGuest;
+      postForm.style.display = isGuest ? "none" : "block";
+      loginBtn.disabled = !isGuest;
+      logoutBtn.disabled = isGuest;
     }
 
-    contentDiv.innerHTML += embed;
-  };
-
-  /* ===== LOAD POSTS ===== */
-  async function loadPosts() {
-    const res = await fetch("/api/posts", { credentials: "include" });
-    const data = await res.json();
-    session_name = data.session_name;
-    updateUI();
-
-    const container = document.getElementById("posts");
-    container.innerHTML = "";
-
-    data.posts.forEach(post => {
-      const div = document.createElement("div");
-      div.className = "card mb-3 p-3";
-      div.innerHTML = `
-        <h4>${post.title} <small class="text-muted">by ${post.author}</small></h4>
-        <div>${post.content}</div>
-        <hr/>
-      `;
-      container.appendChild(div);
-    });
-  }
-
-  /* ===== SUBMIT POST ===== */
-  postForm.onsubmit = async e => {
-    e.preventDefault();
-
-    await fetch("/api/posts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({
-        title: titleInput.value,
-        content: contentDiv.innerHTML
-      })
-    });
-
-    titleInput.value = "";
-    contentDiv.innerHTML = "";
-    loadPosts();
-  };
-
-  /* ===== AUTH ===== */
-  loginBtn.onclick = async () => {
-    const [address] = await ethereum.request({ method: "eth_requestAccounts" });
-    const nonceRes = await fetch(`/auth/nonce?address=${address}`, { credentials: "include" });
-    const { nonce } = await nonceRes.json();
-
-    const signature = await ethereum.request({
-      method: "personal_sign",
-      params: [`Login nonce: ${nonce}`, address]
-    });
-
-    const res = await fetch("/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ address, signature })
-    });
-
-    const data = await res.json();
-    if (data.success) {
-      session_name = data.address;
+    async function loadPosts() {
+      const res = await fetch("/api/posts", { credentials: "include" });
+      const data = await res.json();
+      session_name = data.session_name;
       updateUI();
-      loadPosts();
+
+      const container = document.getElementById("posts");
+      container.innerHTML = "";
+
+      data.posts.forEach(post => {
+        const commentsHtml = post.comments
+          .map(c => `<p><b>${c.author}</b>: ${c.text}</p>`)
+          .join("");
+
+        const div = document.createElement("div");
+        div.className = "card mb-3 p-3";
+
+        div.innerHTML = `
+          <h3>${post.title}
+            <small class="text-muted">by ${post.author}</small>
+          </h3>
+
+          <!-- ✅ FIX: render HTML safely -->
+          <div class="mb-2">${post.content}</div>
+
+          <p>👍 ${post.likes} | 👎 ${post.dislikes}</p>
+
+          ${
+            session_name !== "guest"
+              ? `
+                <button class="btn btn-outline-primary btn-sm me-1" onclick="likePost('${post._id}')">
+                  ${post.is_liked ? "Unlike" : "Like"}
+                </button>
+                <button class="btn btn-outline-secondary btn-sm me-1" onclick="dislikePost('${post._id}')">
+                  ${post.is_disliked ? "Undislike" : "Dislike"}
+                </button>
+              `
+              : ""
+          }
+
+          <div class="mt-2">
+            <h5>Comments</h5>
+            ${commentsHtml}
+            ${
+              session_name !== "guest"
+                ? `
+                  <textarea id="comment-${post._id}" class="form-control mb-1" placeholder="Write a comment"></textarea>
+                  <button class="btn btn-secondary btn-sm" onclick="addComment('${post._id}')">Comment</button>
+                `
+                : "<p><i>Login to comment</i></p>"
+            }
+          </div>
+
+          ${
+            post.author === session_name
+              ? `<button class="btn btn-outline-danger btn-sm mt-2" onclick="deletePost('${post._id}')">Delete</button>`
+              : ""
+          }
+        `;
+
+        container.appendChild(div);
+      });
     }
-  };
 
-  logoutBtn.onclick = async () => {
-    await fetch("/auth/logout", { method: "POST", credentials: "include" });
-    session_name = "guest";
-    updateUI();
-    loadPosts();
-  };
+    window.addComment = async postId => {
+      const textarea = document.getElementById(`comment-${postId}`);
+      const text = textarea.value.trim();
+      if (!text) return;
 
-  loadPosts();
-</script>
-</body>
-</html>
+      await fetch(`/api/posts/comment/${postId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ text })
+      });
+
+      textarea.value = "";
+      loadPosts();
+    };
+
+    window.likePost = async id => {
+      await fetch(`/api/posts/like/${id}`, { method: "POST", credentials: "include" });
+      loadPosts();
+    };
+
+    window.dislikePost = async id => {
+      await fetch(`/api/posts/dislike/${id}`, { method: "POST", credentials: "include" });
+      loadPosts();
+    };
+
+    window.deletePost = async id => {
+      await fetch(`/api/posts/delete/${id}`, { method: "DELETE", credentials: "include" });
+      loadPosts();
+    };
+
+    postForm.onsubmit = async e => {
+      e.preventDefault();
+
+      const contentHtml = quill.root.innerHTML;
+
+      await fetch("/api/posts", {
+        method: "POST",
+        headers: { "Content-
