@@ -20,10 +20,6 @@
       height: 220px;
       background-color: #fff;
     }
-
-    .media-toolbar button {
-      margin-right: 5px;
-    }
   </style>
 </head>
 
@@ -44,13 +40,10 @@
         required
       >
 
-      <!-- Media buttons -->
-      <div class="media-toolbar mb-2">
-        <button type="button" id="addImage" class="btn btn-outline-secondary btn-sm">
-          Add Image (URL)
-        </button>
+      <!-- Video button -->
+      <div class="mb-2">
         <button type="button" id="addVideo" class="btn btn-outline-secondary btn-sm">
-          Add Video (URL)
+          Add Video (YouTube URL)
         </button>
       </div>
 
@@ -67,7 +60,7 @@
 
     <br>
 
-    <!-- BOTTOM BUTTONS -->
+    <!-- AUTH BUTTONS -->
     <div class="d-flex justify-content-start mb-4">
       <button id="loginBtn" class="btn btn-success me-2">
         Login with MetaMask
@@ -105,35 +98,14 @@
       logoutBtn.disabled = isGuest;
     }
 
-    // ✅ ADD IMAGE BY URL
-    document.getElementById("addImage").onclick = () => {
-      const url = prompt("Enter image URL:");
-      if (!url) return;
-
-      const range = quill.getSelection(true);
-      quill.insertEmbed(range.index, "image", url);
-      quill.setSelection(range.index + 1);
-    };
-
-    // ✅ ADD VIDEO BY URL
+    // ✅ SAFE VIDEO EMBED ONLY
     document.getElementById("addVideo").onclick = () => {
-      const url = prompt("Enter video URL (YouTube or MP4):");
+      const url = prompt("Paste YouTube video URL:");
       if (!url) return;
 
       const range = quill.getSelection(true);
-
-      // YouTube auto-embed
-      if (url.includes("youtube.com") || url.includes("youtu.be")) {
-        quill.insertEmbed(range.index, "video", url);
-      } else {
-        // HTML5 video
-        quill.clipboard.dangerouslyPasteHTML(
-          range.index,
-          `<video controls style="max-width:100%">
-             <source src="${url}">
-           </video>`
-        );
-      }
+      quill.insertEmbed(range.index, "video", url);
+      quill.setSelection(range.index + 1);
     };
 
     async function loadPosts() {
