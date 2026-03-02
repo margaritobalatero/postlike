@@ -48,10 +48,40 @@
 
     html {
       transition: background-color 0.3s, color 0.3s;
+      scroll-behavior: smooth;
     }
 
     .post-card {
       transition: all 0.2s;
+    }
+
+    #backToTop {
+      position: fixed;
+      bottom: 25px;
+      right: 25px;
+      z-index: 1000;
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      font-size: 1.4rem;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.3s, visibility 0.3s, transform 0.2s;
+    }
+
+    #backToTop.show {
+      opacity: 0.85;
+      visibility: visible;
+    }
+
+    #backToTop:hover {
+      opacity: 1;
+      transform: scale(1.1);
+    }
+
+    #searchContainer {
+      max-width: 500px;
+      margin: 0 auto 1.5rem;
     }
   </style>
 </head>
@@ -60,8 +90,8 @@
 
   <div class="container">
 
-    <!-- Theme + Auth row -->
-    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
+    <!-- Theme + Auth + Search -->
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-3">
       <button id="themeToggle" class="btn btn-outline-secondary btn-sm">
         🌙 Dark Mode
       </button>
@@ -74,6 +104,17 @@
           Logout
         </button>
       </div>
+    </div>
+
+    <!-- Search bar -->
+    <div id="searchContainer">
+      <input
+        type="search"
+        id="searchInput"
+        class="form-control"
+        placeholder="Search posts by title or content..."
+        autocomplete="off"
+      >
     </div>
 
     <!-- Add post form -->
@@ -102,8 +143,14 @@
 
   </div>
 
+  <!-- Back to Top button -->
+  <button id="backToTop" class="btn btn-primary d-flex align-items-center justify-content-center shadow">
+    ↑
+  </button>
+
   <script type="module">
     let session_name = "guest";
+    let allPosts = []; // store full posts data for client-side filtering
 
     const htmlEl         = document.documentElement;
     const themeToggle    = document.getElementById("themeToggle");
@@ -114,6 +161,8 @@
     const contentInput   = document.getElementById("content");
     const postForm       = document.getElementById("postForm");
     const postsContainer = document.getElementById("posts");
+    const searchInput    = document.getElementById("searchInput");
+    const backToTop      = document.getElementById("backToTop");
 
     // ── Theme handling ───────────────────────────────────────
     function setTheme(theme) {
@@ -143,7 +192,76 @@
       logoutBtn.disabled = isGuest;
     }
 
-    // ── Load & render posts ──────────────────────────────────
+    // ── Render posts (used by both load and search) ──────────
+    function renderPosts(postsToShow) {
+      postsContainer.innerHTML = "";
+
+      if (postsToShow.length === 0) {
+        postsContainer.innerHTML = '<div class="alert alert-info text-center py-4">No posts match your search.</div>';
+        return;
+      }
+
+      postsToShow.forEach(post => {
+        const commentsHtml = post.comments
+          .map(c => `<p class="mb-1"><strong>${c.author}</strong>: ${c.text}</p>`)
+          .join("") || '<p class="text-muted fst-italic small">No comments yet.</p>';
+
+        const card = document.createElement("div");
+        card.className = "card post-card shadow-sm";
+
+        card.innerHTML = `
+          <div class="card-body">
+            <h5 class="card-title mb-1">
+              ${post.title}
+              <small class="text-muted"> • by ${post.author}</small>
+            </h5>
+            <p class="card-text mb-2">${post.content}</p>
+
+            <div class="text-muted small mb-3">
+              👍 ${post.likes}   •   👎 ${post.dislikes}
+            </div>
+
+            ${session_name !== "guest" ? `
+              <button class="btn btn-outline-primary btn-sm me-2 mb-2"
+                      onclick="likePost('${post._id}')">
+                ${post.is_liked ? "Unlike" : "Like"}
+              </button>
+              <button class="btn btn-outline-secondary btn-sm me-2 mb-2"
+                      onclick="dislikePost('${post._id}')">
+                ${post.is_disliked ? "Undislike" : "Dislike"}
+              </button>
+            ` : ""}
+
+            <div class="mt-3">
+              <h6 class="mb-2">Comments</h6>
+              ${commentsHtml}
+
+              ${session_name !== "guest" ? `
+                <textarea id="comment-${post._id}"
+                  class="form-control form-control-sm mt-2 mb-2"
+                  placeholder="Write a comment..."
+                  rows="2"></textarea>
+                <button class="btn btn-secondary btn-sm"
+                        onclick="addComment('${post._id}')">
+                  Comment
+                </button>
+              ` : "<small class=\"text-muted\">Login to comment</small>"}
+            </div>
+
+            ${post.author === session_name ? `
+              <button class="btn btn-outline-danger btn-sm mt-3"
+                      onclick="deletePost('${post._id}')">
+                Delete
+              </button>
+            ` : ""}
+          </div>
+        `;
+
+        postsContainer.appendChild(card);
+      });
+    }
+
+    // ── Load posts from API ──────────────────────────────────
     async function loadPosts() {
       try {
         const res = await fetch("/api/posts", { credentials: "include" });
@@ -153,94 +271,63 @@
         session_name = data.session_name;
         updateUI();
 
-        postsContainer.innerHTML = "";
-
-        data.posts.forEach(post => {
-          const commentsHtml = post.comments
-            .map(c => `<p class="mb-1"><strong>${c.author}</strong>: ${c.text}</p>`)
-            .join("") || '<p class="text-muted fst-italic small">No comments yet.</p>';
-
-          const card = document.createElement("div");
-          card.className = "card post-card shadow-sm";
-
-          card.innerHTML = `
-            <div class="card-body">
-              <h5 class="card-title mb-1">
-                ${post.title}
-                <small class="text-muted"> • by ${post.author}</small>
-              </h5>
-              <p class="card-text mb-2">${post.content}</p>
-
-              <div class="text-muted small mb-3">
-                👍 ${post.likes}   •   👎 ${post.dislikes}
-              </div>
-
-              ${session_name !== "guest" ? `
-                <button class="btn btn-outline-primary btn-sm me-2 mb-2"
-                        onclick="likePost('${post._id}')">
-                  ${post.is_liked ? "Unlike" : "Like"}
-                </button>
-                <button class="btn btn-outline-secondary btn-sm me-2 mb-2"
-                        onclick="dislikePost('${post._id}')">
-                  ${post.is_disliked ? "Undislike" : "Dislike"}
-                </button>
-              ` : ""}
-
-              <div class="mt-3">
-                <h6 class="mb-2">Comments</h6>
-                ${commentsHtml}
-
-                ${session_name !== "guest" ? `
-                  <textarea id="comment-${post._id}"
-                    class="form-control form-control-sm mt-2 mb-2"
-                    placeholder="Write a comment..."
-                    rows="2"></textarea>
-                  <button class="btn btn-secondary btn-sm"
-                          onclick="addComment('${post._id}')">
-                    Comment
-                  </button>
-                ` : "<small class=\"text-muted\">Login to comment</small>"}
-              </div>
-
-              ${post.author === session_name ? `
-                <button class="btn btn-outline-danger btn-sm mt-3"
-                        onclick="deletePost('${post._id}')">
-                  Delete
-                </button>
-              ` : ""}
-            </div>
-          `;
-
-          postsContainer.appendChild(card);
-        });
+        allPosts = data.posts; // save full list for filtering
+        renderPosts(allPosts); // initial render
       } catch (err) {
         console.error(err);
         postsContainer.innerHTML = `<div class="alert alert-danger">Failed to load posts. Please try again.</div>`;
       }
     }
 
-    // ── MetaMask login with better error handling ────────────
+    // ── Client-side search ───────────────────────────────────
+    function filterPosts() {
+      const query = searchInput.value.toLowerCase().trim();
+
+      if (!query) {
+        renderPosts(allPosts);
+        return;
+      }
+
+      const filtered = allPosts.filter(post =>
+        post.title.toLowerCase().includes(query) ||
+        post.content.toLowerCase().includes(query)
+      );
+
+      renderPosts(filtered);
+    }
+
+    searchInput.addEventListener("input", filterPosts);
+
+    // ── Back to Top button logic ─────────────────────────────
+    window.addEventListener("scroll", () => {
+      if (window.scrollY > 400) {
+        backToTop.classList.add("show");
+      } else {
+        backToTop.classList.remove("show");
+      }
+    });
+
+    backToTop.onclick = () => {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    };
+
+    // ── MetaMask login (unchanged + safety) ──────────────────
     loginBtn.onclick = async () => {
       if (typeof window.ethereum === "undefined") {
         alert(
           "MetaMask not detected!\n\n" +
-          "Please check:\n" +
-          "1. MetaMask extension is installed and unlocked\n" +
-          "2. You are visiting the site over HTTPS (not HTTP)\n" +
-          "3. Refresh the page\n" +
-          "4. Try in Chrome/Brave/Firefox (not in-app browser)"
+          "1. MetaMask extension installed & unlocked\n" +
+          "2. Using HTTPS (not HTTP)\n" +
+          "3. Refresh page\n" +
+          "4. Try Chrome/Brave/Firefox"
         );
         return;
       }
 
       try {
-        const [address] = await window.ethereum.request({
-          method: "eth_requestAccounts"
-        });
+        const [address] = await window.ethereum.request({ method: "eth_requestAccounts" });
 
-        const nonceRes = await fetch(`/auth/nonce?address=${address}`, {
-          credentials: "include"
-        });
+        const nonceRes = await fetch(`/auth/nonce?address=${address}`, { credentials: "include" });
         const { nonce } = await nonceRes.json();
 
         const signature = await window.ethereum.request({
@@ -261,29 +348,25 @@
           updateUI();
           loadPosts();
         } else {
-          alert("Login failed: " + (data.error || "Unknown error"));
+          alert("Login failed: " + (data.error || "Unknown"));
         }
       } catch (err) {
         console.error("MetaMask login error:", err);
         let msg = "Login failed.";
         if (err.code === 4001) msg = "You rejected the connection.";
-        else if (err.code === -32002) msg = "MetaMask is busy — check the extension.";
+        else if (err.code === -32002) msg = "MetaMask busy — check extension.";
         else if (err.message) msg += " " + err.message;
         alert(msg);
       }
     };
 
     logoutBtn.onclick = async () => {
-      await fetch("/auth/logout", {
-        method: "POST",
-        credentials: "include"
-      });
+      await fetch("/auth/logout", { method: "POST", credentials: "include" });
       session_name = "guest";
       updateUI();
       loadPosts();
     };
 
-    // ── Form submit ──────────────────────────────────────────
     postForm.onsubmit = async e => {
       e.preventDefault();
       await fetch("/api/posts", {
@@ -300,7 +383,6 @@
       loadPosts();
     };
 
-    // ── Global helper functions ──────────────────────────────
     window.addComment = async (postId) => {
       const textarea = document.getElementById(`comment-${postId}`);
       const text = textarea.value.trim();
@@ -318,27 +400,18 @@
     };
 
     window.likePost = async (id) => {
-      await fetch(`/api/posts/like/${id}`, {
-        method: "POST",
-        credentials: "include"
-      });
+      await fetch(`/api/posts/like/${id}`, { method: "POST", credentials: "include" });
       loadPosts();
     };
 
     window.dislikePost = async (id) => {
-      await fetch(`/api/posts/dislike/${id}`, {
-        method: "POST",
-        credentials: "include"
-      });
+      await fetch(`/api/posts/dislike/${id}`, { method: "POST", credentials: "include" });
       loadPosts();
     };
 
     window.deletePost = async (id) => {
       if (!confirm("Delete this post?")) return;
-      await fetch(`/api/posts/delete/${id}`, {
-        method: "DELETE",
-        credentials: "include"
-      });
+      await fetch(`/api/posts/delete/${id}`, { method: "DELETE", credentials: "include" });
       loadPosts();
     };
 
