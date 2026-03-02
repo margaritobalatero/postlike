@@ -1,9 +1,10 @@
 <!DOCTYPE html>
-<html data-bs-theme="light">   <!-- start with light; will be toggled -->
+<html data-bs-theme="light">
 <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Junjie Posts</title>
 
-  <!-- Bootstrap 5.3+ CSS (already supports data-bs-theme) -->
   <link
     href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
     rel="stylesheet"
@@ -12,25 +13,21 @@
   >
 
   <style>
-    /* Optional: small fixes/improvements for better dark mode look */
     [data-bs-theme="dark"] {
-      --bs-body-bg: #0d1117;           /* GitHub-like dark bg */
-      --bs-body-color: #e6edf3;        /* light text */
+      --bs-body-bg: #0d1117;
+      --bs-body-color: #e6edf3;
       --bs-secondary-color: #8b949e;
       --bs-border-color: #30363d;
 
-      /* Make cards stand out a bit more */
       .card {
         background-color: #161b22;
         border-color: #30363d;
       }
 
-      /* Slightly better muted text */
       .text-muted {
         --bs-text-opacity: 0.65;
       }
 
-      /* Form controls look better */
       .form-control {
         background-color: #0d1117;
         border-color: #30363d;
@@ -41,7 +38,6 @@
         color: #8b949e;
       }
 
-      /* Buttons that aren't primary/secondary look nicer */
       .btn-outline-primary {
         --bs-btn-color: #58a6ff;
         --bs-btn-border-color: #388bfd;
@@ -50,9 +46,12 @@
       }
     }
 
-    /* Smooth transition when switching themes */
     html {
-      transition: background-color 0.25s, color 0.25s;
+      transition: background-color 0.3s, color 0.3s;
+    }
+
+    .post-card {
+      transition: all 0.2s;
     }
   </style>
 </head>
@@ -61,16 +60,14 @@
 
   <div class="container">
 
-    <!-- Theme toggle + Auth buttons -->
-    <div class="d-flex justify-content-between align-items-center mb-4">
-      <div>
-        <button id="themeToggle" class="btn btn-outline-secondary btn-sm">
-          🌙 Dark Mode
-        </button>
-      </div>
+    <!-- Theme + Auth row -->
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
+      <button id="themeToggle" class="btn btn-outline-secondary btn-sm">
+        🌙 Dark Mode
+      </button>
 
-      <div class="d-flex justify-content-start">
-        <button id="loginBtn" class="btn btn-success me-2">
+      <div class="d-flex gap-2">
+        <button id="loginBtn" class="btn btn-success">
           Login with MetaMask
         </button>
         <button id="logoutBtn" class="btn btn-danger" disabled>
@@ -79,7 +76,7 @@
       </div>
     </div>
 
-    <!-- ADD POST FORM -->
+    <!-- Add post form -->
     <form id="postForm" class="mb-4">
       <input
         type="text"
@@ -90,7 +87,7 @@
       >
       <textarea
         id="content"
-        placeholder="Content"
+        placeholder="Content..."
         class="form-control mb-2"
         rows="5"
         required
@@ -100,31 +97,31 @@
       </button>
     </form>
 
-    <!-- POSTS -->
-    <div id="posts" class="row row-cols-1 g-3"></div>
+    <!-- Posts container -->
+    <div id="posts" class="d-flex flex-column gap-3"></div>
 
   </div>
 
   <script type="module">
     let session_name = "guest";
 
-    const htmlEl       = document.documentElement;
-    const themeToggle  = document.getElementById("themeToggle");
-    const loginBtn     = document.getElementById("loginBtn");
-    const logoutBtn    = document.getElementById("logoutBtn");
-    const postBtn      = document.getElementById("postBtn");
-    const titleInput   = document.getElementById("title");
-    const contentInput = document.getElementById("content");
-    const postForm     = document.getElementById("postForm");
+    const htmlEl         = document.documentElement;
+    const themeToggle    = document.getElementById("themeToggle");
+    const loginBtn       = document.getElementById("loginBtn");
+    const logoutBtn      = document.getElementById("logoutBtn");
+    const postBtn        = document.getElementById("postBtn");
+    const titleInput     = document.getElementById("title");
+    const contentInput   = document.getElementById("content");
+    const postForm       = document.getElementById("postForm");
+    const postsContainer = document.getElementById("posts");
 
-    // ── Theme logic ────────────────────────────────────────
+    // ── Theme handling ───────────────────────────────────────
     function setTheme(theme) {
       htmlEl.setAttribute("data-bs-theme", theme);
       themeToggle.textContent = theme === "dark" ? "☀️ Light Mode" : "🌙 Dark Mode";
       localStorage.setItem("theme", theme);
     }
 
-    // Load saved theme or system preference
     const savedTheme = localStorage.getItem("theme");
     if (savedTheme) {
       setTheme(savedTheme);
@@ -137,7 +134,7 @@
       setTheme(current === "dark" ? "light" : "dark");
     };
 
-    // ── Rest of your existing logic (slightly cleaned up) ──
+    // ── UI update ────────────────────────────────────────────
     function updateUI() {
       const isGuest = session_name === "guest";
       postForm.style.display = isGuest ? "none" : "block";
@@ -146,133 +143,107 @@
       logoutBtn.disabled = isGuest;
     }
 
+    // ── Load & render posts ──────────────────────────────────
     async function loadPosts() {
-      const res = await fetch("/api/posts", { credentials: "include" });
-      if (!res.ok) return;
-      const data = await res.json();
+      try {
+        const res = await fetch("/api/posts", { credentials: "include" });
+        if (!res.ok) throw new Error("Failed to load posts");
+        const data = await res.json();
 
-      session_name = data.session_name;
-      updateUI();
+        session_name = data.session_name;
+        updateUI();
 
-      const container = document.getElementById("posts");
-      container.innerHTML = "";
+        postsContainer.innerHTML = "";
 
-      data.posts.forEach(post => {
-        const commentsHtml = post.comments
-          .map(c => `<p class="mb-1"><b>${c.author}</b>: ${c.text}</p>`)
-          .join("");
+        data.posts.forEach(post => {
+          const commentsHtml = post.comments
+            .map(c => `<p class="mb-1"><strong>${c.author}</strong>: ${c.text}</p>`)
+            .join("") || '<p class="text-muted fst-italic small">No comments yet.</p>';
 
-        const card = document.createElement("div");
-        card.className = "card";
+          const card = document.createElement("div");
+          card.className = "card post-card shadow-sm";
 
-        card.innerHTML = `
-          <div class="card-body">
-            <h5 class="card-title">
-              ${post.title}
-              <small class="text-muted">by ${post.author}</small>
-            </h5>
-            <p class="card-text">${post.content}</p>
+          card.innerHTML = `
+            <div class="card-body">
+              <h5 class="card-title mb-1">
+                ${post.title}
+                <small class="text-muted"> • by ${post.author}</small>
+              </h5>
+              <p class="card-text mb-2">${post.content}</p>
 
-            <p class="text-muted mb-2">
-              👍 ${post.likes}  •  👎 ${post.dislikes}
-            </p>
-
-            ${session_name !== "guest" ? `
-              <button class="btn btn-outline-primary btn-sm me-2"
-                onclick="likePost('${post._id}')">
-                ${post.is_liked ? "Unlike" : "Like"}
-              </button>
-              <button class="btn btn-outline-secondary btn-sm me-2"
-                onclick="dislikePost('${post._id}')">
-                ${post.is_disliked ? "Undislike" : "Dislike"}
-              </button>
-            ` : ""}
-
-            <div class="mt-3">
-              <h6 class="mb-2">Comments</h6>
-              ${commentsHtml || '<p class="text-muted fst-italic">No comments yet</p>'}
+              <div class="text-muted small mb-3">
+                👍 ${post.likes}   •   👎 ${post.dislikes}
+              </div>
 
               ${session_name !== "guest" ? `
-                <textarea id="comment-${post._id}"
-                  class="form-control form-control-sm mt-2 mb-2"
-                  placeholder="Write a comment..."
-                  rows="2"></textarea>
-                <button class="btn btn-secondary btn-sm"
-                  onclick="addComment('${post._id}')">
-                  Comment
+                <button class="btn btn-outline-primary btn-sm me-2 mb-2"
+                        onclick="likePost('${post._id}')">
+                  ${post.is_liked ? "Unlike" : "Like"}
                 </button>
-              ` : "<small class=\"text-muted\">Login to comment</small>"}
+                <button class="btn btn-outline-secondary btn-sm me-2 mb-2"
+                        onclick="dislikePost('${post._id}')">
+                  ${post.is_disliked ? "Undislike" : "Dislike"}
+                </button>
+              ` : ""}
+
+              <div class="mt-3">
+                <h6 class="mb-2">Comments</h6>
+                ${commentsHtml}
+
+                ${session_name !== "guest" ? `
+                  <textarea id="comment-${post._id}"
+                    class="form-control form-control-sm mt-2 mb-2"
+                    placeholder="Write a comment..."
+                    rows="2"></textarea>
+                  <button class="btn btn-secondary btn-sm"
+                          onclick="addComment('${post._id}')">
+                    Comment
+                  </button>
+                ` : "<small class=\"text-muted\">Login to comment</small>"}
+              </div>
+
+              ${post.author === session_name ? `
+                <button class="btn btn-outline-danger btn-sm mt-3"
+                        onclick="deletePost('${post._id}')">
+                  Delete
+                </button>
+              ` : ""}
             </div>
+          `;
 
-            ${post.author === session_name ? `
-              <button class="btn btn-outline-danger btn-sm mt-3"
-                onclick="deletePost('${post._id}')">
-                Delete
-              </button>
-            ` : ""}
-          </div>
-        `;
-
-        container.appendChild(card);
-      });
+          postsContainer.appendChild(card);
+        });
+      } catch (err) {
+        console.error(err);
+        postsContainer.innerHTML = `<div class="alert alert-danger">Failed to load posts. Please try again.</div>`;
+      }
     }
 
-    // Your existing window functions (unchanged)
-    window.addComment = async postId => {
-      const textarea = document.getElementById(`comment-${postId}`);
-      const text = textarea.value.trim();
-      if (!text) return;
-
-      await fetch(`/api/posts/comment/${postId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ text })
-      });
-
-      textarea.value = "";
-      loadPosts();
-    };
-
-    window.likePost = async id => {
-      await fetch(`/api/posts/like/${id}`, { method: "POST", credentials: "include" });
-      loadPosts();
-    };
-
-    window.dislikePost = async id => {
-      await fetch(`/api/posts/dislike/${id}`, { method: "POST", credentials: "include" });
-      loadPosts();
-    };
-
-    window.deletePost = async id => {
-      await fetch(`/api/posts/delete/${id}`, { method: "DELETE", credentials: "include" });
-      loadPosts();
-    };
-
-    postForm.onsubmit = async e => {
-      e.preventDefault();
-      await fetch("/api/posts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          title: titleInput.value,
-          content: contentInput.value
-        })
-      });
-      titleInput.value = "";
-      contentInput.value = "";
-      loadPosts();
-    };
-
-    // Login / Logout (unchanged)
+    // ── MetaMask login with better error handling ────────────
     loginBtn.onclick = async () => {
+      if (typeof window.ethereum === "undefined") {
+        alert(
+          "MetaMask not detected!\n\n" +
+          "Please check:\n" +
+          "1. MetaMask extension is installed and unlocked\n" +
+          "2. You are visiting the site over HTTPS (not HTTP)\n" +
+          "3. Refresh the page\n" +
+          "4. Try in Chrome/Brave/Firefox (not in-app browser)"
+        );
+        return;
+      }
+
       try {
-        const [address] = await ethereum.request({ method: "eth_requestAccounts" });
-        const nonceRes = await fetch(`/auth/nonce?address=${address}`, { credentials: "include" });
+        const [address] = await window.ethereum.request({
+          method: "eth_requestAccounts"
+        });
+
+        const nonceRes = await fetch(`/auth/nonce?address=${address}`, {
+          credentials: "include"
+        });
         const { nonce } = await nonceRes.json();
 
-        const signature = await ethereum.request({
+        const signature = await window.ethereum.request({
           method: "personal_sign",
           params: [`Login nonce: ${nonce}`, address]
         });
@@ -289,16 +260,85 @@
           session_name = data.address;
           updateUI();
           loadPosts();
+        } else {
+          alert("Login failed: " + (data.error || "Unknown error"));
         }
       } catch (err) {
-        console.error("Login failed", err);
+        console.error("MetaMask login error:", err);
+        let msg = "Login failed.";
+        if (err.code === 4001) msg = "You rejected the connection.";
+        else if (err.code === -32002) msg = "MetaMask is busy — check the extension.";
+        else if (err.message) msg += " " + err.message;
+        alert(msg);
       }
     };
 
     logoutBtn.onclick = async () => {
-      await fetch("/auth/logout", { method: "POST", credentials: "include" });
+      await fetch("/auth/logout", {
+        method: "POST",
+        credentials: "include"
+      });
       session_name = "guest";
       updateUI();
+      loadPosts();
+    };
+
+    // ── Form submit ──────────────────────────────────────────
+    postForm.onsubmit = async e => {
+      e.preventDefault();
+      await fetch("/api/posts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          title: titleInput.value.trim(),
+          content: contentInput.value.trim()
+        })
+      });
+      titleInput.value = "";
+      contentInput.value = "";
+      loadPosts();
+    };
+
+    // ── Global helper functions ──────────────────────────────
+    window.addComment = async (postId) => {
+      const textarea = document.getElementById(`comment-${postId}`);
+      const text = textarea.value.trim();
+      if (!text) return;
+
+      await fetch(`/api/posts/comment/${postId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ text })
+      });
+
+      textarea.value = "";
+      loadPosts();
+    };
+
+    window.likePost = async (id) => {
+      await fetch(`/api/posts/like/${id}`, {
+        method: "POST",
+        credentials: "include"
+      });
+      loadPosts();
+    };
+
+    window.dislikePost = async (id) => {
+      await fetch(`/api/posts/dislike/${id}`, {
+        method: "POST",
+        credentials: "include"
+      });
+      loadPosts();
+    };
+
+    window.deletePost = async (id) => {
+      if (!confirm("Delete this post?")) return;
+      await fetch(`/api/posts/delete/${id}`, {
+        method: "DELETE",
+        credentials: "include"
+      });
       loadPosts();
     };
 
@@ -306,7 +346,6 @@
     loadPosts();
   </script>
 
-  <!-- Bootstrap JS (needed for any interactive components, though not strictly required here) -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
