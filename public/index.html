@@ -1,24 +1,86 @@
 <!DOCTYPE html>
-<html>
+<html data-bs-theme="light">   <!-- start with light; will be toggled -->
 <head>
   <title>Junjie Posts</title>
 
-  <!-- Bootstrap CSS CDN -->
+  <!-- Bootstrap 5.3+ CSS (already supports data-bs-theme) -->
   <link
     href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
     rel="stylesheet"
+    integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH"
+    crossorigin="anonymous"
   >
+
+  <style>
+    /* Optional: small fixes/improvements for better dark mode look */
+    [data-bs-theme="dark"] {
+      --bs-body-bg: #0d1117;           /* GitHub-like dark bg */
+      --bs-body-color: #e6edf3;        /* light text */
+      --bs-secondary-color: #8b949e;
+      --bs-border-color: #30363d;
+
+      /* Make cards stand out a bit more */
+      .card {
+        background-color: #161b22;
+        border-color: #30363d;
+      }
+
+      /* Slightly better muted text */
+      .text-muted {
+        --bs-text-opacity: 0.65;
+      }
+
+      /* Form controls look better */
+      .form-control {
+        background-color: #0d1117;
+        border-color: #30363d;
+        color: #e6edf3;
+      }
+
+      .form-control::placeholder {
+        color: #8b949e;
+      }
+
+      /* Buttons that aren't primary/secondary look nicer */
+      .btn-outline-primary {
+        --bs-btn-color: #58a6ff;
+        --bs-btn-border-color: #388bfd;
+        --bs-btn-hover-color: #ffffff;
+        --bs-btn-hover-bg: #388bfd;
+      }
+    }
+
+    /* Smooth transition when switching themes */
+    html {
+      transition: background-color 0.25s, color 0.25s;
+    }
+  </style>
 </head>
 
-<body class="bg-light p-3">
+<body class="p-3">
 
   <div class="container">
 
-    <!-- POSTS -->
-    <div id="posts"></div>
+    <!-- Theme toggle + Auth buttons -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <div>
+        <button id="themeToggle" class="btn btn-outline-secondary btn-sm">
+          🌙 Dark Mode
+        </button>
+      </div>
+
+      <div class="d-flex justify-content-start">
+        <button id="loginBtn" class="btn btn-success me-2">
+          Login with MetaMask
+        </button>
+        <button id="logoutBtn" class="btn btn-danger" disabled>
+          Logout
+        </button>
+      </div>
+    </div>
 
     <!-- ADD POST FORM -->
-    <form id="postForm" class="mb-3 mt-3">
+    <form id="postForm" class="mb-4">
       <input
         type="text"
         id="title"
@@ -26,49 +88,56 @@
         class="form-control mb-2"
         required
       >
-
       <textarea
         id="content"
         placeholder="Content"
         class="form-control mb-2"
-        rows="6"
+        rows="5"
         required
       ></textarea>
-
-      <button
-        type="submit"
-        id="postBtn"
-        class="btn btn-primary"
-      >
+      <button type="submit" id="postBtn" class="btn btn-primary">
         Add Post
       </button>
     </form>
 
-    <br>
-
-    <!-- AUTH BUTTONS -->
-    <div class="d-flex justify-content-start mb-4">
-      <button id="loginBtn" class="btn btn-success me-2">
-        Login with MetaMask
-      </button>
-
-      <button id="logoutBtn" class="btn btn-danger" disabled>
-        Logout
-      </button>
-    </div>
+    <!-- POSTS -->
+    <div id="posts" class="row row-cols-1 g-3"></div>
 
   </div>
 
   <script type="module">
     let session_name = "guest";
 
-    const loginBtn = document.getElementById("loginBtn");
-    const logoutBtn = document.getElementById("logoutBtn");
-    const postBtn = document.getElementById("postBtn");
-    const titleInput = document.getElementById("title");
+    const htmlEl       = document.documentElement;
+    const themeToggle  = document.getElementById("themeToggle");
+    const loginBtn     = document.getElementById("loginBtn");
+    const logoutBtn    = document.getElementById("logoutBtn");
+    const postBtn      = document.getElementById("postBtn");
+    const titleInput   = document.getElementById("title");
     const contentInput = document.getElementById("content");
-    const postForm = document.getElementById("postForm");
+    const postForm     = document.getElementById("postForm");
 
+    // ── Theme logic ────────────────────────────────────────
+    function setTheme(theme) {
+      htmlEl.setAttribute("data-bs-theme", theme);
+      themeToggle.textContent = theme === "dark" ? "☀️ Light Mode" : "🌙 Dark Mode";
+      localStorage.setItem("theme", theme);
+    }
+
+    // Load saved theme or system preference
+    const savedTheme = localStorage.getItem("theme");
+    if (savedTheme) {
+      setTheme(savedTheme);
+    } else if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
+      setTheme("dark");
+    }
+
+    themeToggle.onclick = () => {
+      const current = htmlEl.getAttribute("data-bs-theme") || "light";
+      setTheme(current === "dark" ? "light" : "dark");
+    };
+
+    // ── Rest of your existing logic (slightly cleaned up) ──
     function updateUI() {
       const isGuest = session_name === "guest";
       postForm.style.display = isGuest ? "none" : "block";
@@ -79,6 +148,7 @@
 
     async function loadPosts() {
       const res = await fetch("/api/posts", { credentials: "include" });
+      if (!res.ok) return;
       const data = await res.json();
 
       session_name = data.session_name;
@@ -89,75 +159,65 @@
 
       data.posts.forEach(post => {
         const commentsHtml = post.comments
-          .map(c => `<p><b>${c.author}</b>: ${c.text}</p>`)
+          .map(c => `<p class="mb-1"><b>${c.author}</b>: ${c.text}</p>`)
           .join("");
 
-        const div = document.createElement("div");
-        div.className = "card mb-3 p-3";
+        const card = document.createElement("div");
+        card.className = "card";
 
-        div.innerHTML = `
-          <h3>${post.title}
-            <small class="text-muted">by ${post.author}</small>
-          </h3>
+        card.innerHTML = `
+          <div class="card-body">
+            <h5 class="card-title">
+              ${post.title}
+              <small class="text-muted">by ${post.author}</small>
+            </h5>
+            <p class="card-text">${post.content}</p>
 
-          <p>${post.content}</p>
+            <p class="text-muted mb-2">
+              👍 ${post.likes}  •  👎 ${post.dislikes}
+            </p>
 
-          <p>👍 ${post.likes} | 👎 ${post.dislikes}</p>
+            ${session_name !== "guest" ? `
+              <button class="btn btn-outline-primary btn-sm me-2"
+                onclick="likePost('${post._id}')">
+                ${post.is_liked ? "Unlike" : "Like"}
+              </button>
+              <button class="btn btn-outline-secondary btn-sm me-2"
+                onclick="dislikePost('${post._id}')">
+                ${post.is_disliked ? "Undislike" : "Dislike"}
+              </button>
+            ` : ""}
 
-          ${
-            session_name !== "guest"
-              ? `
-                <button class="btn btn-outline-primary btn-sm me-1"
-                  onclick="likePost('${post._id}')">
-                  ${post.is_liked ? "Unlike" : "Like"}
+            <div class="mt-3">
+              <h6 class="mb-2">Comments</h6>
+              ${commentsHtml || '<p class="text-muted fst-italic">No comments yet</p>'}
+
+              ${session_name !== "guest" ? `
+                <textarea id="comment-${post._id}"
+                  class="form-control form-control-sm mt-2 mb-2"
+                  placeholder="Write a comment..."
+                  rows="2"></textarea>
+                <button class="btn btn-secondary btn-sm"
+                  onclick="addComment('${post._id}')">
+                  Comment
                 </button>
+              ` : "<small class=\"text-muted\">Login to comment</small>"}
+            </div>
 
-                <button class="btn btn-outline-secondary btn-sm me-1"
-                  onclick="dislikePost('${post._id}')">
-                  ${post.is_disliked ? "Undislike" : "Dislike"}
-                </button>
-              `
-              : ""
-          }
-
-          <div class="mt-2">
-            <h5>Comments</h5>
-            ${commentsHtml}
-
-            ${
-              session_name !== "guest"
-                ? `
-                  <textarea
-                    id="comment-${post._id}"
-                    class="form-control mb-1"
-                    placeholder="Write a comment"
-                  ></textarea>
-
-                  <button class="btn btn-secondary btn-sm"
-                    onclick="addComment('${post._id}')">
-                    Comment
-                  </button>
-                `
-                : "<i>Login to comment</i>"
-            }
+            ${post.author === session_name ? `
+              <button class="btn btn-outline-danger btn-sm mt-3"
+                onclick="deletePost('${post._id}')">
+                Delete
+              </button>
+            ` : ""}
           </div>
-
-          ${
-            post.author === session_name
-              ? `
-                <button class="btn btn-outline-danger btn-sm mt-2"
-                  onclick="deletePost('${post._id}')">
-                  Delete
-                </button>
-              `
-              : ""
-          }
         `;
 
-        container.appendChild(div);
+        container.appendChild(card);
       });
     }
 
+    // Your existing window functions (unchanged)
     window.addComment = async postId => {
       const textarea = document.getElementById(`comment-${postId}`);
       const text = textarea.value.trim();
@@ -175,32 +235,22 @@
     };
 
     window.likePost = async id => {
-      await fetch(`/api/posts/like/${id}`, {
-        method: "POST",
-        credentials: "include"
-      });
+      await fetch(`/api/posts/like/${id}`, { method: "POST", credentials: "include" });
       loadPosts();
     };
 
     window.dislikePost = async id => {
-      await fetch(`/api/posts/dislike/${id}`, {
-        method: "POST",
-        credentials: "include"
-      });
+      await fetch(`/api/posts/dislike/${id}`, { method: "POST", credentials: "include" });
       loadPosts();
     };
 
     window.deletePost = async id => {
-      await fetch(`/api/posts/delete/${id}`, {
-        method: "DELETE",
-        credentials: "include"
-      });
+      await fetch(`/api/posts/delete/${id}`, { method: "DELETE", credentials: "include" });
       loadPosts();
     };
 
     postForm.onsubmit = async e => {
       e.preventDefault();
-
       await fetch("/api/posts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -210,55 +260,53 @@
           content: contentInput.value
         })
       });
-
       titleInput.value = "";
       contentInput.value = "";
       loadPosts();
     };
 
+    // Login / Logout (unchanged)
     loginBtn.onclick = async () => {
-      const [address] = await ethereum.request({
-        method: "eth_requestAccounts"
-      });
+      try {
+        const [address] = await ethereum.request({ method: "eth_requestAccounts" });
+        const nonceRes = await fetch(`/auth/nonce?address=${address}`, { credentials: "include" });
+        const { nonce } = await nonceRes.json();
 
-      const nonceRes = await fetch(`/auth/nonce?address=${address}`, {
-        credentials: "include"
-      });
+        const signature = await ethereum.request({
+          method: "personal_sign",
+          params: [`Login nonce: ${nonce}`, address]
+        });
 
-      const { nonce } = await nonceRes.json();
+        const res = await fetch("/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ address, signature })
+        });
 
-      const signature = await ethereum.request({
-        method: "personal_sign",
-        params: [`Login nonce: ${nonce}`, address]
-      });
-
-      const res = await fetch("/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ address, signature })
-      });
-
-      const data = await res.json();
-      if (data.success) {
-        session_name = data.address;
-        updateUI();
-        loadPosts();
+        const data = await res.json();
+        if (data.success) {
+          session_name = data.address;
+          updateUI();
+          loadPosts();
+        }
+      } catch (err) {
+        console.error("Login failed", err);
       }
     };
 
     logoutBtn.onclick = async () => {
-      await fetch("/auth/logout", {
-        method: "POST",
-        credentials: "include"
-      });
-
+      await fetch("/auth/logout", { method: "POST", credentials: "include" });
       session_name = "guest";
       updateUI();
       loadPosts();
     };
 
+    // Initial load
     loadPosts();
   </script>
+
+  <!-- Bootstrap JS (needed for any interactive components, though not strictly required here) -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
